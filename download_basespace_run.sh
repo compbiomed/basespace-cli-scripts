@@ -1,53 +1,94 @@
 #!/bin/bash
-# Download files from BaseSpace Run to SCC
-# Adam Gower
-#
-# INPUT
-# This script expects the following command-line arguments:
-#   1. The BaseSpace Run ID (integer)
-#   2. The path where the Run files will be written
-#   3. The BaseSpace configuration to use
-#   4. [optional] Any globs to exclude from download; defaults to '*.jpg'
-#
-# OUTPUT
-# The script places the Run files in the specified path.
 
-if [[ $# -lt 3 ]]
+# Set default values for arguments
+output_path="$(pwd)"
+bs_config="default"
+exclude_extensions=(jpg)
+
+# Parse command-line arguments
+eval set -- "$(
+  getopt --options=i:o:c:e: \
+         --longoptions=id:,output-path:,config:,exclude: \
+         --name "$0" -- "$@"
+)"
+
+while true
+do
+  case "$1" in
+    -i|--id)
+      run_id="$2"
+      shift 2 ;;
+    -o|--output-path)
+      output_path="$(readlink --canonicalize "$2")"
+      shift 2 ;;
+    -c|--config)
+      bs_config="$2"
+      shift 2 ;;
+    -e|--exclude)
+      IFS="," read -a exclude_extensions < <(echo "$2")
+      shift 2 ;;
+    --)
+      shift
+      break ;;
+    *)
+      echo "Internal error"
+      exit 1 ;;
+  esac
+done
+
+if [[ ${run_id} == "" ]]
 then
-  echo -n "Usage: bash download_basespace_run.sh "
-  echo -n "[BaseSpace Run ID] [destination path] [basespace-cli config] "
-  echo    "[globs to exclude]"
-  echo    "       [globs to exclude] default: '*.jpg'"
+  echo "Usage:"
+  echo "  bash download_basespace_run.sh [options] -i|--id [Run ID]"
+  echo "Options:"
+  echo "  -i, --id             BaseSpace Run ID (integer)"
+  echo "  -o, --output-path    Path where the Run files will be written"
+  echo "                       (Default: current working directory)"
+  echo "  -c, --config         BaseSpace CLI configuration"
+  echo "                       (Default: 'default')"
+  echo "  -e, --exclude        Comma-separated list of extensions to exclude"
+  echo "                       (Default: 'jpg')"
 else
-  # Parse command-line arguments
-  arglist=("$@")
-  run_id="${arglist[0]}"
-  destination_path="$(readlink --canonicalize "${arglist[1]}")"
-  bs_config="${arglist[2]}"
-  exclude_globs=(${arglist[@]:3})
+  # All file extensions present within a given Run
+  extensions=(bci bgzf bin filter jpg json locs tsv txt xml zip)
 
-  # If no globs were provided, use "*.jpg" as the default
-  if [[ ${#exclude_globs[@]} == 0 ]]
-  then
-    exclude_globs=("*.jpg")
-  fi
+  # Remove excluded extensions
+  readarray -t extensions < <(
+    printf "%s\n" "${extensions[@]}" "${exclude_extensions[@]}" | sort | uniq -u
+  )
 
   # Load and list modules
-  module load basespace-cli/0.8.12.590
+  module load basespace-cli
   module list
 
-  # Get info pertaining to Run ID
-  run_info="$(bs -c ${bs_config} list runs -f csv --quote none)"
-  run_info="$(echo "${run_info}" | grep "${run_id}")"
-  run_name="$(echo "${run_info}" | cut -f2 -d',')"
-  experiment_name="$(echo "${run_info}" | cut -f3 -d',')"
+  # Get BaseSpace CLI version
+  bscli_version="$(bs --version | tr -s " " "\n" | grep -E -o "^[0-9\.]+$")"
+  # Check whether the basespace-cli is a deprecated Python-based version
+  # (versions 0.5.1-284 through basespace-cli-0.8.12-590);
+  # if so, exit with an error message, and if not, proceed
+  if [[ ${bscli_version} > "0.5" && ${bscli_version} < "0.9" ]]
+  then
+    # Exit with an error message if an old Python version is installed
+    echo "BaseSpace version ${bscli_version} is no longer supported."
+  else
+    # Change IFS temporarily (note lack of semicolon after assignment) to ","
+    # and read info pertaining to Run ID into an array
+    # (Name, Id, ExperimentName, Status)
+    IFS="," read -a run_info < <(
+      bs --config=${bs_config} list runs --format=csv \
+         --filter-field=Id --filter-term=${run_id} | tail -n 1
+    )
+    # Retrieve all files from Run (except for specified extensions)
+    # to destination path
+    echo -n "Retrieving files from BaseSpace Run "
+    echo -n "${run_id} ('${run_info[0]}'), Experiment '${run_info[2]}' "
+    echo "to ${output_path}/"
+    echo "Retrieving only files with the following extensions: ${extensions[*]}"
+    bs --config=${bs_config} --verbose download run \
+       --id=${run_id} --output="${output_path}" \
+       --extension="$(IFS=","; echo "${extensions[*]}")"
 
-  # Get all files from Run, except for jpg thumbnail images
-  echo -n "Retrieving files from BaseSpace Run "
-  echo    "${run_id} ('${experiment_name}') to ${destination_path}/"
-  bs cp //~${bs_config}/Runs/${run_id}/** \
-     $(printf -- "--exclude %s " ${exclude_globs[@]}) ${destination_path}
-
-  # Change permissions to read-only
-  chmod -R ug+rX,ug-w,o-rwx ${destination_path}/
+    # Change permissions to read-only
+    chmod -R ug+rX,ug-w,o-rwx "${output_path}"/
+  fi
 fi
