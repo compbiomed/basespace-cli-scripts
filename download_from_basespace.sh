@@ -126,12 +126,12 @@ else
       for filename in ${tempdir}/*/*.fastq.gz
       do
         # Test integrity of gzip archive; print message and terminate if corrupt
-        if [[ $(gzip -t ${filename}) ]]
+        if $(gzip -t ${filename})
         then
+          echo "${filename} is OK."
+        else
           echo "${filename} is corrupted!  Terminating."
           exit
-        else
-          echo "${filename} is OK."
         fi
         # Extract the flowcell from the first read of the file
         flowcell="$(zcat ${filename} | head -n 1 | cut -f3 -d':')"
