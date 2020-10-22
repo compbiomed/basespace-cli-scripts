@@ -109,12 +109,15 @@ else
 
     for project_id in ${project_ids[@]}
     do
-      # Retrieve Project files to temporary directory containing a 
-      # directory tree named with project ID and sample IDs, e.g.,
-      #   tempdir/SampleName1_SampleId1/*.fastq.gz
-      #   tempdir/SampleName2_SampleId2/*.fastq.gz
+      # Retrieve Project files to temporary directory tree 
+      # named with sample names and download session IDs, e.g.,
+      #   tempdir/SampleName1_L001_ds.DownloadSessionId1/*.fastq.gz
+      #   tempdir/SampleName1_L002_ds.DownloadSessionId2/*.fastq.gz
+      #   tempdir/SampleName2_L001_ds.DownloadSessionId3/*.fastq.gz
+      #   tempdir/SampleName2_L002_ds.DownloadSessionId4/*.fastq.gz
       #   ...
-      #   tempdir/SampleNameN_SampleIdN/*.fastq.gz
+      # where DownloadSessionId is a 32-character hex string that is unique
+      # to a specific download session (files from a sample/lane combination).
       # Note: this directory tree is also read-only and will need to be unlocked
       #       before the cleanup step below.
       bash "${script_path}/download_basespace_project.sh" \
@@ -147,7 +150,11 @@ else
         fi
         # Concatenate lane-specific FASTQ files to sample-specific FASTQ files
         # within the sequencing run folder corresponding to the flowcell
-        destination_filename="${seq_run_path}/$(basename ${filename/_L00?_/_})"
+        # Note: the destination filename is constructed in two steps below
+        #       to replace only the "L00?" lane ID glob in the base filename
+        #       and not the one in the name of the temporary directory
+        destination_filename="$(basename ${filename})"
+        destination_filename="${seq_run_path}/${destination_filename/_L00?_/_}"
         echo "Appending ${filename} to ${destination_filename}"
         cat ${filename} >> "${destination_filename}"
       done
