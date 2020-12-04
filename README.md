@@ -72,24 +72,26 @@ Options:
                        (Default: 'default')
 ```
 This script performs the following tasks:
-1. The script `download_basespace_run_metadata.sh` is used to retrieve the metadata for each Run, producing the tarballs:
+
+1. If Run IDs are specified, the script `download_basespace_run_metadata.sh` is used to retrieve the metadata for each Run, producing the tarballs:
    `[tarfile path]/[run name].tar.gz`
    where `run name` is of the form:
    `[yymmdd]_[instrument ID]_[run index]_[A or B][flowcell ID]`
 
-2. The following directory is created for each Run:
-   `[FASTQ path]/[run name]/`
+2. If Project IDs are specified:
+  - The script `download_basespace_project.sh` is used to retrieve the `.fastq.gz` files for each Project.
+  - The integrity of each `.fastq.gz` file is tested using `gzip -t` to ensure that it was correctly downloaded.
+  - The flowcell ID of each `.fastq.gz` file is obtained, and the following directory is created for each flowcell ID:
+    - If Run IDs are specified, and one of the Run names ends with the flowcell ID:
+     `[FASTQ path]/[Run name]/`
+    - If Run IDs are not specified, or none of the Run names ends with the flowcell ID:
+     `[FASTQ path]/[flowcell ID]/`
+  - The `.fastq.gz` files for each sample are concatenated across all lanes, e.g., the files:
+    `SampleX_S1_L00*_R1_001.fastq.gz`
+    are concatenated (in order, by lane) into:
+    `[Flowcell-specific output path]/SampleX_S1_R1_001.fastq.gz`
 
-3. The script `download_basespace_project.sh` is used to retrieve the `.fastq.gz` files for each Project.
-
-4. The integrity of each `.fastq.gz` file is tested using `gzip -t` to ensure that it was correctly downloaded.
-
-5. For each Run, the `.fastq.gz` files for each sample are concatenated across all lanes, e.g., the files:
-   `SampleX_S1_L00*_R1_001.fastq.gz`
-   are concatentated (in order, by lane) into:
-   `[FASTQ path]/[run name]/SampleX_S1_R1_001.fastq.gz`
-
-6. The tarball, each run-specific directory, and all of the FASTQ files contained in each of them are all set to read-only permissions to prevent accidental deletion.
+3. All output files (tarball, flowcell-specific directories, and all FASTQ files) are set to read-only permissions to prevent accidental deletion.
 
 Note: this script assumes that it is in the same path as `download_basespace_run_metadata.sh` and `download_basespace_project.sh`.
 

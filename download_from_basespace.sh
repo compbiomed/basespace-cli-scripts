@@ -39,7 +39,7 @@ do
   esac
 done
 
-if [[ ${run_ids} == "" ]]
+if [[ ${#run_ids[@]} -eq 0 && ${#project_ids[@]} -eq 0 ]]
 then
   echo    "Usage:"
   echo -n "  bash download_from_basespace.sh [options] "
@@ -65,7 +65,8 @@ else
   tempdir=$(mktemp --directory)
 
   # Declare variables
-  declare -a seq_run_paths
+  declare -A run_names
+  declare -a flowcell_paths
 
   # Load and list modules
   module load basespace-cli
@@ -90,21 +91,15 @@ else
         bs --config=${bs_config} list runs --format=csv \
            --filter-field=Id --filter-term=${run_id} | tail -n 1
       )
+      # Extract flowcell ID from run name
+      run_name=${run_info[0]}
+      flowcell=${run_name:(-9)}
+      # Add run name to associative array, labeled with flowcell ID
+      run_names[${flowcell}]=${run_name}
 
       # Retrieve tarball of Run metadata
       bash "${script_path}/download_basespace_run_metadata.sh" \
            --id=${run_id} --output-path="${tarfile_path}" --config=${bs_config}
-
-      # Construct sequencing-run-specific path and add to array
-      seq_run_path="${fastq_path}/${run_info[0]}"
-      seq_run_paths+=("${seq_run_path}")
-      # If it exists, remove it first; then, create it (user-readable only)
-      if [[ -e "${seq_run_path}" ]]
-      then
-        chmod -R u+w "${seq_run_path}"/
-        rm -rf "${seq_run_path:?}"/
-      fi
-      mkdir --verbose --mode=2700 "${seq_run_path}"/
     done
 
     for project_id in ${project_ids[@]}
@@ -129,32 +124,39 @@ else
       for filename in ${tempdir}/*/*.fastq.gz
       do
         # Test integrity of gzip archive; print message and terminate if corrupt
-        if $(gzip -t ${filename})
+        if gzip -t ${filename}
         then
           echo "${filename} is OK."
         else
           echo "${filename} is corrupted!  Terminating."
           exit
         fi
+
         # Extract the flowcell from the first read of the file
         flowcell="$(zcat ${filename} | head -n 1 | cut -f3 -d':')"
-        # Determine if sequencing run directory exists
-        # with name ending in flowcell ID
-        seq_run_path="$(ls -d "${fastq_path}"/*${flowcell} 2> /dev/null)"
-        # If not, create one named solely with flowcell ID, and add to array
-        if [[ ${seq_run_path} == "" ]]
+        # Construct path where FASTQ files will be written for given flowcell ID
+        if [ ${run_names[${flowcell}]} == "" ]
         then
-          seq_run_path="${fastq_path}/${flowcell}"
-          mkdir --verbose --mode=2700 "${seq_run_path}"/
-          seq_run_paths+=("${seq_run_path}")
+          # If Run exists with name ending in flowcell ID, use that as label
+          flowcell_path="${fastq_path}/${run_names[${flowcell}]}"
+        else
+          # Otherwise, use the flowcell ID itself as the label
+          flowcell_path="${fastq_path}/${flowcell}"
         fi
+        # If flowcell-specific path does not exist, create and add to array
+        if [ ! -d "${flowcell_path}" ]
+        then
+          mkdir --verbose --mode=2700 "${flowcell_path}"/
+          flowcell_paths+=("${flowcell_path}")
+        fi
+
         # Concatenate lane-specific FASTQ files to sample-specific FASTQ files
         # within the sequencing run folder corresponding to the flowcell
         # Note: the destination filename is constructed in two steps below
         #       to replace only the "L00?" lane ID glob in the base filename
         #       and not the one in the name of the temporary directory
         destination_filename="$(basename ${filename})"
-        destination_filename="${seq_run_path}/${destination_filename/_L00?_/_}"
+        destination_filename="${flowcell_path}/${destination_filename/_L00?_/_}"
         echo "Appending ${filename} to ${destination_filename}"
         cat ${filename} >> "${destination_filename}"
       done
@@ -164,9 +166,9 @@ else
 
     # Set sequencing-run-specific directories to group-readable and read-only
     echo "Setting FASTQ directories to read-only."
-    for seq_run_path in "${seq_run_paths[@]}"
+    for flowcell_path in "${flowcell_paths[@]}"
     do
-      chmod -Rc ug+rX,ug-w,o-rwx "${seq_run_path}"
+      chmod -Rc ug+rX,ug-w,o-rwx "${flowcell_path}"
     done
 
     # Clean up
