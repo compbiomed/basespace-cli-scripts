@@ -135,7 +135,7 @@ else
         # Extract the flowcell from the first read of the file
         flowcell="$(zcat ${filename} | head -n 1 | cut -f3 -d':')"
         # Construct path where FASTQ files will be written for given flowcell ID
-        if [[ ${run_names[${flowcell}]} == "" ]]
+        if [[ ${run_names[${flowcell}]} != "" ]]
         then
           # If Run exists with name ending in flowcell ID, use that as label
           flowcell_path="${fastq_path}/${run_names[${flowcell}]}"
