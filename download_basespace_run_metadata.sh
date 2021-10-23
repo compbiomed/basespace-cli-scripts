@@ -60,7 +60,7 @@ else
        --exclude=$(IFS=,; echo "${exclude_extensions[*]}")
 
   # Extract run name from RunInfo.xml
-  run_regex="[0-9]+_[^_]+_[0-9]+_[AB][A-Za-z0-9]{9}"
+  run_regex="[0-9]{6}_[^_]+_[0-9]+_[AB]?[A-Za-z0-9]{9}"
   run_name="$(grep -E -o "${run_regex}" ${tempdir}/RunInfo.xml)"
 
   # Check for empty run name (in case RunInfo.xml is missing or corrupt,
