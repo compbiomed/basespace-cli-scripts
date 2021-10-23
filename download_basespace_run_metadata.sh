@@ -47,7 +47,7 @@ else
   script_path="$(readlink --canonicalize "$(dirname "${0}")")"
 
   # All file extensions to exclude from Run download
-  exclude_extensions=(bci bgzf filter jpg locs)
+  exclude_extensions=(bci bgzf cbcl filter jpg locs)
 
   # Make temporary directory and navigate to it
   tempdir="$(mktemp --directory)"

@@ -50,7 +50,10 @@ then
   echo "                       (Default: 'jpg')"
 else
   # All file extensions present within a given Run
-  extensions=(bci bgzf bin filter jpg json locs tsv txt xml zip)
+  extensions=(
+    bat bci bgzf bin cbcl cfg csv filter Id imf1 jpg json Location locs
+    PrepKitInfo tsv txt xml zip
+  )
 
   # Remove excluded extensions
   readarray -t extensions < <(
